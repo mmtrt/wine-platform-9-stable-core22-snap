@@ -1,0 +1,74 @@
+name: wine-platform-9-stable-core22
+adopt-info: wine
+summary: wine platform snap it provides stable WINE 9 for snaps
+description: |
+ This snap creates a WINE stable 9 via content sharing to be used by other snaps that are using WINE.
+
+grade: stable
+confinement: strict
+architectures:
+  - build-on: amd64
+base: core22
+compression: lzo
+
+lint:
+  # Snapcraft's `ldd` lint can't handle WINE PE format files,
+  # So just make it quiet and also make builds a surprising amount faster
+  ignore:
+    - library:
+        - opt/wine-stable/lib/wine/i386-unix/**
+        - opt/wine-stable/lib64/wine/x86_64-unix/**
+
+slots:
+  wine-9-stable:
+    interface: content
+    source:
+      read:
+      - $SNAP/opt/wine-stable
+
+parts:
+  wine:
+    plugin: nil
+    build-packages:
+      - dpkg
+      - wget
+    override-build: |
+      craftctl default
+
+      ARCH="$(dpkg --print-architecture)"
+      WINE_VER="$(wget -qO- https://dl.winehq.org/wine-builds/ubuntu/dists/jammy/main/binary-amd64/ | grep wine-stable | sed 's|_| |g;s|~| |g' | awk '{print $5}' | tail -n1)"
+
+      # set snap version
+      craftctl set version="$WINE_VER"
+
+      # wget and dpkg extract the wine debs
+      ## supporting binaries which are arch-specific but the same filenames in both architectures so we only install the native architecture
+      DEB_URLS="https://dl.winehq.org/wine-builds/ubuntu/dists/jammy/main/binary-${ARCH}/wine-stable_${WINE_VER}~jammy-1_${ARCH}.deb"
+
+      ## wine loaders - this one is the native system architecture
+      DEB_URLS="$DEB_URLS https://dl.winehq.org/wine-builds/ubuntu/dists/jammy/main/binary-${ARCH}/wine-stable-${ARCH}_${WINE_VER}~jammy-1_${ARCH}.deb"
+
+      if [ "$ARCH" = "amd64" ]; then
+        ## on amd64 builds we need to also bundle the i386 wine loaders
+        DEB_URLS="$DEB_URLS https://dl.winehq.org/wine-builds/ubuntu/dists/jammy/main/binary-i386/wine-stable-i386_${WINE_VER}~jammy-1_i386.deb"
+      fi
+
+      for DEB_URL in ${DEB_URLS}; do
+        DEB=$(basename "${DEB_URL}")
+        echo "Downloading ${DEB_URL}..."
+        wget --quiet "${DEB_URL}" -O "${CRAFT_PART_INSTALL}/${DEB}"
+        echo "Unpacking ${DEB}..."
+        dpkg -x "${CRAFT_PART_INSTALL}/${DEB}" ${CRAFT_PART_INSTALL}
+        rm -f "${CRAFT_PART_INSTALL}/${DEB}"
+      done
+
+      # Cleanup
+      rm -rf ${CRAFT_PART_INSTALL}/opt/wine-stable/share/applications
+      rm -rf ${CRAFT_PART_INSTALL}/opt/wine-stable/share/man
+      rm -rf ${CRAFT_PART_INSTALL}/usr
+
+      # Disable winemenubuilder
+      sed -i 's/winemenubuilder.exe -a -r/winemenubuilder.exe -r/g' "${CRAFT_PART_INSTALL}"/opt/wine-stable/share/wine/wine.inf
+
+      # Pre patch CJK font replacement with Noto Sans CJK by defualt
+      sed -i 's|    LicenseInformation|    LicenseInformation,\\\n    FontReplacement|g;$a \\n[FontReplacement]\nHKCU,Software\\Wine\\Fonts\\Replacements,"Batang",,"Noto Sans CJK KR"\nHKCU,Software\\Wine\\Fonts\\Replacements,"BatangChe",,"Noto Sans CJK KR"\nHKCU,Software\\Wine\\Fonts\\Replacements,"Dotum",,"Noto Sans CJK KR"\nHKCU,Software\\Wine\\Fonts\\Replacements,"DotumChe",,"Noto Sans CJK KR"\nHKCU,Software\\Wine\\Fonts\\Replacements,"Gulim",,"Noto Sans CJK KR"\nHKCU,Software\\Wine\\Fonts\\Replacements,"GulimChe",,"Noto Sans CJK KR"\nHKCU,Software\\Wine\\Fonts\\Replacements,"Microsoft JhengHei",,"Noto Sans CJK TC"\nHKCU,Software\\Wine\\Fonts\\Replacements,"Microsoft JhengHei Light",,"Noto Sans CJK TC Light"\nHKCU,Software\\Wine\\Fonts\\Replacements,"Microsoft JhengHei Bold",,"Noto Sans CJK TC Black"\nHKCU,Software\\Wine\\Fonts\\Replacements,"Microsoft JhengHei UI",,"Noto Sans CJK TC"\nHKCU,Software\\Wine\\Fonts\\Replacements,"Microsoft JhengHei UI Light",,"Noto Sans CJK TC Light"\nHKCU,Software\\Wine\\Fonts\\Replacements,"Microsoft JhengHei UI Bold",,"Noto Sans CJK TC Black"\nHKCU,Software\\Wine\\Fonts\\Replacements,"Microsoft YaHei",,"Noto Sans CJK SC"\nHKCU,Software\\Wine\\Fonts\\Replacements,"Microsoft YaHei Light",,"Noto Sans CJK SC Light"\nHKCU,Software\\Wine\\Fonts\\Replacements,"Microsoft YaHei Bold",,"Noto Sans CJK SC Black"\nHKCU,Software\\Wine\\Fonts\\Replacements,"Microsoft YaHei UI",,"Noto Sans CJK SC"\nHKCU,Software\\Wine\\Fonts\\Replacements,"Microsoft YaHei UI Light",,"Noto Sans CJK SC Light"\nHKCU,Software\\Wine\\Fonts\\Replacements,"Microsoft YaHei UI Bold",,"Noto Sans CJK SC Black"\nHKCU,Software\\Wine\\Fonts\\Replacements,"MingLiU",,"Noto Sans CJK TC"\nHKCU,Software\\Wine\\Fonts\\Replacements,"MingLiU-ExtB",,"Noto Sans CJK TC"\nHKCU,Software\\Wine\\Fonts\\Replacements,"MingLiU_HKSCS",,"Noto Sans CJK HK"\nHKCU,Software\\Wine\\Fonts\\Replacements,"MingLiU_HKSCS-ExtB",,"Noto Sans CJK HK"\nHKCU,Software\\Wine\\Fonts\\Replacements,"MS Gothic",,"Noto Sans CJK JP"\nHKCU,Software\\Wine\\Fonts\\Replacements,"MS PGothic",,"Noto Sans CJK JP"\nHKCU,Software\\Wine\\Fonts\\Replacements,"MS UI Gothic",,"Noto Sans CJK JP"\nHKCU,Software\\Wine\\Fonts\\Replacements,"NSimSun",,"Noto Sans CJK SC"\nHKCU,Software\\Wine\\Fonts\\Replacements,"PMingLiU",,"Noto Sans CJK TC"\nHKCU,Software\\Wine\\Fonts\\Replacements,"PMingLiU-ExtB",,"Noto Sans CJK TC"\nHKCU,Software\\Wine\\Fonts\\Replacements,"SimHei",,"Noto Sans CJK SC"\nHKCU,Software\\Wine\\Fonts\\Replacements,"SimSun",,"Noto Sans CJK SC"\nHKCU,Software\\Wine\\Fonts\\Replacements,"SimSun-ExtB",,"Noto Sans CJK SC"\nHKCU,Software\\Wine\\Fonts\\Replacements,"Yu Gothic Regular",,"Noto Sans CJK JP"\nHKCU,Software\\Wine\\Fonts\\Replacements,"Yu Gothic Medium",,"Noto Sans CJK JP Medium"\nHKCU,Software\\Wine\\Fonts\\Replacements,"Yu Gothic Light",,"Noto Sans CJK JP Light"\nHKCU,Software\\Wine\\Fonts\\Replacements,"Yu Gothic Bold",,"Noto Sans CJK JP Black"\nHKCU,Software\\Wine\\Fonts\\Replacements,"Yu Gothic UI Regular",,"Noto Sans CJK JP"\nHKCU,Software\\Wine\\Fonts\\Replacements,"Yu Gothic UI Medium",,"Noto Sans CJK JP Medium"\nHKCU,Software\\Wine\\Fonts\\Replacements,"Yu Gothic UI Semilight",,"Noto Sans CJK JP DemiLight"\nHKCU,Software\\Wine\\Fonts\\Replacements,"Yu Gothic UI Light",,"Noto Sans CJK JP Light"\nHKCU,Software\\Wine\\Fonts\\Replacements,"Yu Gothic UI Bold",,"Noto Sans CJK JP Black"' "${CRAFT_PART_INSTALL}"/opt/wine-stable/share/wine/wine.inf
